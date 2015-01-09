@@ -1,10 +1,10 @@
 import cStringIO
 
-from unittest2 import TestCase
 
 import send_nsca
 
 from .. import util
+from ..unittest import TestCase
 
 
 class TestConfig(TestCase):

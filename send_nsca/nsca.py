@@ -221,7 +221,7 @@ _init_packet_format = '!%dsL' % (_TRANSMITTED_IV_SIZE,)
 
 
 def get_random_alphanumeric_bytes(bytesz):
-    return ''.join(chr(random.randrange(ord('0'), ord('Z'))) for _ in xrange(bytesz))
+    return ''.join(chr(random.randrange(ord('0'), ord('Z'))) for _ in range(bytesz))
 
 
 def _pack_packet(hostname, service, state, output, timestamp):
@@ -252,14 +252,14 @@ def _pack_packet(hostname, service, state, output, timestamp):
         output += get_random_alphanumeric_bytes(MAX_PLUGINOUTPUT_LENGTH - len(output))
     struct.pack_into('%ds' % (MAX_PLUGINOUTPUT_LENGTH,), packet, offset, output)
     # compute the CRC32 of what we have so far
-    crc_val = binascii.crc32(packet) & 0xffffffffL
+    crc_val = binascii.crc32(packet) & 0xffffffff
     struct.pack_into('!L', packet, 4, crc_val)
     return packet.tostring()
 
 
 ########  MAIN CLASS IMPLEMENTATION ########
 
-class ConfigParseError(StandardError):
+class ConfigParseError(ValueError):
     def __init__(self, filename, lineno, msg):
         self.filename = filename
         self.lineno = lineno
