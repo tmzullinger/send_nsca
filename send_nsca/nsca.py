@@ -228,7 +228,7 @@ def _pack_packet(hostname, service, state, output, timestamp):
     """This is more complicated than a call to struct.pack() because we want
     to pad our strings with random bytes, instead of with zeros."""
     requested_length = struct.calcsize(_data_packet_format)
-    packet = array.array('c', '\0'*requested_length)
+    packet = array.array('c', '\0' * requested_length)
     # first, pack the version, initial crc32, timestamp, and state
     # (collectively:header)
     header_format = '!hxxLLh'
@@ -270,6 +270,18 @@ class ConfigParseError(StandardError):
 
     def __repr__(self):
         return "ConfigParseError(%s, %d, %s)" % (self.filename, self.lineno, self.msg)
+
+
+class ConnectionError(StandardError):
+    def __init__(self, remote_server, message):
+        self.remote_server = remote_server
+        self.message = message
+
+    def __str__(self):
+        return 'Connection error to %s: %s' % (self.remote_server, self.message)
+
+    def __repr__(self):
+        return 'ConnectionError(%s, %s)' % (self.remote_server, self.message)
 
 
 class NscaSender(object):
@@ -349,7 +361,7 @@ class NscaSender(object):
     def send_service(self, host, service, state, description):
         self._check_alert(host=host, service=service, state=state, description=description)
         self.connect()
-        for conn, iv, timestamp in self._conns:
+        for remote, conn, iv, timestamp in self._conns:
             if conn not in self._cached_crypters:
                 self._cached_crypters[conn] = self.Crypter(iv, self.password, self.random_generator)
             crypter = self._cached_crypters[conn]
@@ -367,7 +379,7 @@ class NscaSender(object):
             try:
                 s = socket.socket(family, socktype, proto)
                 s.connect(sockaddr)
-                conns.append(s)
+                conns.append(('%s:%d' % (host, port)), s)
                 if timeout is not None:
                     s.settimeout(timeout)
                 if not connect_all:
@@ -380,9 +392,9 @@ class NscaSender(object):
 
     def _handshake_all(self, conns):
         handshakes = []
-        for conn in conns:
-            iv, timestamp = self._read_init_packet(conn)
-            handshakes.append((conn, iv, timestamp))
+        for remote, conn in conns:
+            iv, timestamp = self._read_init_packet(remote, conn)
+            handshakes.append((remote, conn, iv, timestamp))
         return handshakes
 
     def connect(self):
@@ -395,13 +407,19 @@ class NscaSender(object):
     def disconnect(self):
         if not self._connected:
             return
-        for conn, _, _ in self._conns:
+        for _, conn, _, _ in self._conns:
             conn.close()
         self._conns = []
         self._connected = False
 
-    def _read_init_packet(self, fd):
-        init_packet = fd.recv(struct.calcsize(_init_packet_format))
+    def _read_init_packet(self, remote_name, fd):
+        sz = struct.calcsize(_init_packet_format)
+        init_packet = fd.recv(sz)
+        if len(init_packet) < sz:
+            raise ConnectionError(
+                remote_name,
+                'received handshake packet of %zd bytes (expected %zd bytes); is nsca down?'
+            )
         transmitted_iv, timestamp = struct.unpack(_init_packet_format, init_packet)
         return transmitted_iv, timestamp
 
