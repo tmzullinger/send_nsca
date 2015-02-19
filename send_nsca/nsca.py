@@ -1,17 +1,20 @@
 #!/usr/bin/python
 #
 # send_nsca.py: A replacement for the C-based send_nsca, able
-# to be run in pure-python. Depends on PyCrypto and Python >= 2.6.
+# to be run in pure-python. Depends on PyCrypto, mcrypt, and Python >= 2.6.
 #
 # Heavily inspired by (and protocol-compatible with) the original send_nsca,
 # written by Ethan Galstad <nagios@nagios.org>, which was available under
 # the terms of the GNU General Public License v2.
 #
-# Not quite feature-complete. The simpler encryption algorithms (null,
-# XOR, DES, 3DES, Blowfish, ARC2, and CAST) work, but AES doesn't work
-# (the AES that nsca uses isn't compatible with PyCrypto's for reasons
-# that I haven't yet determined). Also, ARC4 is broken upstream, and I
-# didn't fix it.
+# Most algorithms use the python Crypto module. The Rijndael algorithms use
+# mcrypt instead, as AES is not exactly the same as Rijndael and is not
+# compatible in how it is used by nsca. Unfortunately, PyCrypto does not
+# implement Rijndael. It is possible to use Crypto.Cipher.AES to implement
+# Rijndael-128 for nsca by using a key_size of 32, but it's cleaner to simply
+# use mcrypt for all three Rijndael methods.
+#
+# Also, ARC4 is broken upstream, and I didn't fix it.
 #
 # Copyright (C) 2012 Yelp, Inc.
 # Written by James Brown <jbrown@yelp.com>
@@ -31,7 +34,8 @@ import random
 import socket
 import struct
 
-import Crypto.Cipher.AES
+import mcrypt
+
 import Crypto.Cipher.ARC2
 import Crypto.Cipher.Blowfish
 import Crypto.Cipher.DES
@@ -136,6 +140,42 @@ class CryptoCrypter(Crypter):
         return self.crypter.encrypt(value)
 
 
+class MCryptCrypter(Crypter):
+    crypt_id = -1
+    # override this
+    Cipher = None
+    # rarely override these
+    iv_size = None
+    key_size = None
+
+    def __init__(self, *args):
+        super(MCryptCrypter, self).__init__(*args)
+        self.crypter = mcrypt.MCRYPT(self.Cipher, 'cfb')
+        key = self.password
+        iv = self.iv
+
+        if self.iv_size is not None:
+            iv_size = self.iv_size
+        else:
+            iv_size = self.crypter.get_iv_size()
+        if self.key_size is not None:
+            key_size = self.key_size
+        else:
+            key_size = self.crypter.get_key_size()
+        if len(self.password) >= key_size:
+            key = self.password[:key_size]
+        else:
+            key += '\0' * (key_size - len(self.password))
+        if len(self.iv) >= iv_size:
+            iv = self.iv[:iv_size]
+        else:
+            iv += self.random_generator(iv_size - self.iv)
+        self.crypter.init(key, iv)
+
+    def encrypt(self, value):
+        return self.crypter.encrypt(value)
+
+
 class DESCrypter(CryptoCrypter):
     crypt_id = 2
     CryptoCipher = Crypto.Cipher.DES
@@ -197,22 +237,19 @@ class RC6Crypter(UnsupportedCrypter):
     crypt_id = 13
 
 
-class AES128Crypter(CryptoCrypter):
+class Rijndael128Crypter(MCryptCrypter):
     crypt_id = 14
-    CryptoCipher = Crypto.Cipher.AES
-    key_size = 16
+    Cipher = 'rijndael-128'
 
 
-class AES192Crypter(CryptoCrypter):
+class Rijndael192Crypter(MCryptCrypter):
     crypt_id = 15
-    CryptoCipher = Crypto.Cipher.AES
-    key_size = 24
+    Cipher = 'rijndael-192'
 
 
-class AES256Crypter(CryptoCrypter):
+class Rijndael256Crypter(MCryptCrypter):
     crypt_id = 16
-    CryptoCipher = Crypto.Cipher.AES
-    key_size = 32
+    Cipher = 'rijndael-256'
 
 ########  WIRE PROTOCOL IMPLEMENTATION ########
 

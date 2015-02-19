@@ -3,6 +3,7 @@ python:
     - "2.6"
     - "2.7"
 install:
-    - "sudo apt-get install nsca"
+    - "sudo apt-get install libmcrypt-dev nsca"
     - "pip install -r requirements.txt -r requirements-tests.txt --use-mirrors"
+    - "pip install python-mcrypt --allow-external python-mcrypt --allow-unverified python-mcrypt"
 script: "nosetests tests"

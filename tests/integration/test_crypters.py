@@ -40,3 +40,15 @@ class TestCAST128Crypter(TestCrypter):
 
 class TestBlowFishCrypter(TestCrypter):
     crypto_method = 8
+
+
+class TestRijndael128Crypter(TestCrypter):
+    crypto_method = 14
+
+
+class TestRijndael192Crypter(TestCrypter):
+    crypto_method = 15
+
+
+class TestRijndael256Crypter(TestCrypter):
+    crypto_method = 16
